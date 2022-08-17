@@ -4,8 +4,8 @@ from tika import parser
 import pandas as pd
 import shutil as sht
 
-#path = "C:/Users/afernandez/Desktop/Prueba"
-path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-16_18-22-30"
+path = "C:/Users/afernandez/Desktop/Prueba"
+#path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-17_11-37-20"
 pathNoValidos = path + "/NoValidos"
 #pdfFileObj = open('G:/Mi unidad/FORD_CE/Auditoria 2 - Gastos a Terceros/06 Primer Quincenal Junio/JUNIO 01/K042060-22/81016692006127 MIC.pdf', 'rb')  
 flag = 1  
@@ -37,7 +37,7 @@ for file in os.scandir(path):
                     archValido = 1
                     break
             if idTipDoc == '12':
-                if 'ACUSE DE RECIBO' in line.replace('\n</p>\n', '').upper():
+                if 'ACUSE DE RECIBO'and 'DECLARACIÓN PROVISIONAL O DEFINITIVA DE IMPUESTOS FEDERALES' in line.replace('\n</p>\n', '').upper():
                     archValido = 1
                     break
             if idTipDoc == '82':
@@ -56,8 +56,12 @@ for file in os.scandir(path):
         print(idDoc + " es " + str(archValido))
 
         if archValido == 1:
+            rfcProv = ''
+            anio = ''
+            mes = ''
+            nombre = ''
+
             if idTipDoc == '4':
-                rfcProv = ''
                 razonSocialProv = ''
 
                 rfc = re.findall('[A-ZÑ&]{3,4}[0-9]{6}[A-ZÑ&0-9]{3}', data)
@@ -85,12 +89,7 @@ for file in os.scandir(path):
 
                 lstRepse.append([idDoc, idCatOpe, idTipDoc, rfcProv + "|" + razonSocialProv])
 
-        
             if idTipDoc == '82':
-                rfcProv = ''
-                anio = ''
-                mes = ''
-                nombre = ''
                 aPaterno = ''
                 aMaterno = ''
                 bandera = 0
@@ -169,11 +168,26 @@ for file in os.scandir(path):
 
                 lstRepse.append([idDoc, idCatOpe, idTipDoc, rfcProv + "|" + mes.upper().strip() + "|" + anio.strip() + "|" + razonSocial.upper().strip()])
                 
+            if idTipDoc == '12':
+                rfc = re.findall('[A-ZÑ&]{3,4}[0-9]{6}[A-ZÑ&0-9]{3}', data)
+                rfcProv = rfc[0]
+
                 
-                #print(rfcProv)
-                #print(razonSocial.strip())
-                #print(mes.strip())
-                #print(anio.strip())
+                for line in data.split('<p>'):
+                    if 'Denominación o razón' in line:
+                        ini = line.replace('\n', ' ').index("social:")
+                        ini += 7
+
+                        fin = line.replace('\n', ' ').index("</")
+
+                        rango = slice(ini, fin)
+                        nombre = line.replace('\n', ' ')[rango]
+
+                #print(data)
+                print(rfcProv)
+                print(nombre.strip())
+                print(mes.strip())
+                print(anio.strip())
                 
 
         elif archValido == 0:
