@@ -5,7 +5,7 @@ import pandas as pd
 import shutil as sht
 
 #path = "C:/Users/afernandez/Desktop/Prueba"
-path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-16_10-48-53"
+path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-16_18-22-30"
 pathNoValidos = path + "/NoValidos"
 #pdfFileObj = open('G:/Mi unidad/FORD_CE/Auditoria 2 - Gastos a Terceros/06 Primer Quincenal Junio/JUNIO 01/K042060-22/81016692006127 MIC.pdf', 'rb')  
 flag = 1  
@@ -29,13 +29,11 @@ for file in os.scandir(path):
         raw = parser.from_file(file.path, xmlContent=True)
         data = raw['content'].split('<div class="page">')[1].split('</div>')[0]
         archValido = 0
+        formatoIncorrecto = 0
 
         for line in data.split('<p>'):
             if idTipDoc == '4':
-                if 'AVISO DE REGISTRO' in line.replace('\n</p>\n', '').upper():
-                    archValido = 1
-                    break
-                elif 'http://repse.stps.gob.mx' in line:
+                if 'http://repse.stps.gob.mx' in line:
                     archValido = 1
                     break
             if idTipDoc == '12':
@@ -45,10 +43,14 @@ for file in os.scandir(path):
             if idTipDoc == '82':
                 if 'ACUSE DE RECIBO' in line.replace('\n</p>\n', '').upper():
                     archValido = 0
+                    formatoIncorrecto = 1
                     break
                 elif 'DECLARACIÓN PROVISIONAL O DEFINITIVA DE IMPUESTOS FEDERALES' in line.replace('\n</p>\n', '').upper():
                     archValido = 1
                     break
+            
+            #if idDoc == '352209':
+                #print(data)
         
         lstNoValidos.append([idDoc, archValido])
         print(idDoc + " es " + str(archValido))
@@ -86,9 +88,92 @@ for file in os.scandir(path):
         
             if idTipDoc == '82':
                 rfcProv = ''
+                anio = ''
+                mes = ''
+                nombre = ''
+                aPaterno = ''
+                aMaterno = ''
+                bandera = 0
 
                 rfc = re.findall('[A-ZÑ&]{3,4}[0-9]{6}[A-ZÑ&0-9]{3}', data)
                 rfcProv = rfc[0]
+
+                for line in data.split('<p>'):
+                    
+                    if 'Ejercicio:' in line:
+                        ini = line.index("Ejercicio:")
+                        ini += 10
+
+                        fin = line.index("Fecha y hora de")
+
+                        rango = slice(ini, fin)
+                        anio = line.replace('\n', ' ')[rango]
+                    
+                    elif 'Periodicidad:' in line:
+                        ini = line.replace('\n', ' ').index("declaración:")
+                        ini += 12
+
+                        fin = line.replace('\n', ' ').index("</")
+
+                        rango = slice(ini, fin)
+                        mes = line.replace('\n', ' ')[rango]
+
+                    
+                    elif 'EJERCICIO' in line and 'PERIODO' in line:
+                        fila = line.split()
+                        anio = fila[1]
+                        mes = fila[3]
+
+                    elif 'APELLIDO' in line:
+                        fila = line.split()
+                        if 'PATERNO' in line:
+                            aPaterno = fila[2]
+                        elif 'MATERNO' in line:
+                            aMaterno = fila[2]
+                    
+                    elif 'NOMBRE(S)' in line:
+                        ini = line.replace('\n', ' ').index("NOMBRE(S)")
+                        ini += 9
+
+                        fin = line.replace('\n', ' ').index("</")
+
+                        rango = slice(ini, fin)
+                        nombre = line.replace('\n', ' ')[rango]
+                    
+                    elif 'Denominación o razón' in line:
+                        ini = line.replace('\n', ' ').index("social:")
+                        ini += 7
+
+                        fin = line.replace('\n', ' ').index("</")
+
+                        rango = slice(ini, fin)
+                        nombre = line.replace('\n', ' ')[rango]
+                    
+                    elif 'Nombre:' in line:
+                        ini = line.replace('\n', ' ').index("Nombre:")
+                        ini += 7
+
+                        fin = line.replace('\n', ' ').index("</")
+
+                        rango = slice(ini, fin)
+                        nombre = line.replace('\n', ' ')[rango]
+
+                    elif 'DENOMINACIÓN O' in line or bandera == 1:
+                        if 'DENOMINACIÓN O' in line:
+                            bandera = 1
+                        elif bandera == 1:
+                            nombre = line.replace('\n', ' ').replace('</p>', '')
+                            bandera = 0
+
+                razonSocial = nombre.strip() + ' ' + aPaterno.strip() + ' ' + aMaterno.strip() 
+
+                lstRepse.append([idDoc, idCatOpe, idTipDoc, rfcProv + "|" + mes.upper().strip() + "|" + anio.strip() + "|" + razonSocial.upper().strip()])
+                
+                
+                #print(rfcProv)
+                #print(razonSocial.strip())
+                #print(mes.strip())
+                #print(anio.strip())
                 
 
         elif archValido == 0:
@@ -96,6 +181,11 @@ for file in os.scandir(path):
                 os.makedirs(pathNoValidos)
                                 
             sht.copyfile(file.path, pathNoValidos + "//" + file.name)
+
+            if idTipDoc == '82' and formatoIncorrecto == 1:
+                lstRepse.append([idDoc, idCatOpe, idTipDoc, "Archivo No Valido|"])
+            else:
+                lstRepse.append([idDoc, idCatOpe, idTipDoc, "Revisar archivo a mano|"])
     
     else:
         lstRepse.append([idDoc, idCatOpe, idTipDoc, "No es PDF|"])
@@ -103,53 +193,7 @@ for file in os.scandir(path):
 
 
 dataNoValidos = pd.DataFrame(lstNoValidos)
-dataNoValidos.to_csv(path + "//RepseMarzoNoValidos.csv", index=False, encoding='utf-8')   
+dataNoValidos.to_csv(path + "//ArchivosNoValidos.csv", index=False, encoding='utf-8')   
 
 dataRepse = pd.DataFrame(lstRepse)  
-dataRepse.to_csv(path + "//RepseMarzo.csv", index=False, encoding='latin1')                   
-
-            
-        # raw = parser.from_file(file.path, xmlContent=True)
-        # data = raw['content'].split('<div class="page">')[1].split('</div>')[0]
-        # #print(data)
-
-        # for line in data.split('<p>'):
-
-        #     if 'ACUSE DE RECIBO' in line:
-        #         print("DOC: ACUSE DE IVA")
-        #         continue
-
-        #     if 'Período de' in line:
-        #         for char in line.replace('\n</p>\n', '').split(' '):
-        #             if flag == 5:
-        #                 print(char)
-        #             elif flag == 7:
-        #                 print(char)                    
-        #             flag+=1
-
-        #         flag=1                 
-        #         continue
-            
-        #     if 'RFC:' in line:
-        #         for char in line.replace('\n</p>\n', '').split(' '):
-        #             if flag == 2:
-        #                 print(char)
-                    
-        #             flag+=1
-
-        #         flag=1
-        #         continue
-            
-        #     if 'Nombre:' in line:
-        #         print(line.replace('\n</p>\n', '').replace('Nombre: ', ''))
-        #         continue
-
-
-        
-        #print(raw['metadata'])
-        # pdfFileObj = open(file.path, 'rb') 
-        # pdfReader = PyPDF2.PdfFileReader(pdfFileObj, stream=True)      
-        # pageObj = pdfReader.getPage(0)  
-        # extracted_text = sl.PDF(pdfReader)
-        # print(extracted_text)      
-        #pdfFileObj.close()  
+dataRepse.to_csv(path + "//InformacionCarga.csv", index=False, encoding='latin1')                   
