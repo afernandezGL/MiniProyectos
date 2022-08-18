@@ -4,8 +4,8 @@ from tika import parser
 import pandas as pd
 import shutil as sht
 
-path = "C:/Users/afernandez/Desktop/Prueba"
-#path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-17_11-37-20"
+#path = "C:/Users/afernandez/Desktop/Prueba"
+path = "C:/Users/afernandez/Documents/Procesos/CESEData/AzureBlobDownloads/2022-08-17_17-54-31"
 pathNoValidos = path + "/NoValidos"
 #pdfFileObj = open('G:/Mi unidad/FORD_CE/Auditoria 2 - Gastos a Terceros/06 Primer Quincenal Junio/JUNIO 01/K042060-22/81016692006127 MIC.pdf', 'rb')  
 flag = 1  
@@ -37,8 +37,16 @@ for file in os.scandir(path):
                     archValido = 1
                     break
             if idTipDoc == '12':
-                if 'ACUSE DE RECIBO'and 'DECLARACIÓN PROVISIONAL O DEFINITIVA DE IMPUESTOS FEDERALES' in line.replace('\n</p>\n', '').upper():
+                if 'ACUSE DE RECIBO' in line.replace('\n</p>\n', '').upper():
                     archValido = 1
+                    break
+                elif 'DECLARACIÓN PROVISIONAL O DEFINITIVA DE IMPUESTOS FEDERALES' in line.replace('\n</p>\n', '').upper():
+                    archValido = 0
+                    formatoIncorrecto = 1
+                    break
+                elif 'RECIBO BANCARIO' in line.replace('\n</p>\n', '').upper():
+                    archValido = 0
+                    formatoIncorrecto = 1
                     break
             if idTipDoc == '82':
                 if 'ACUSE DE RECIBO' in line.replace('\n</p>\n', '').upper():
@@ -49,8 +57,8 @@ for file in os.scandir(path):
                     archValido = 1
                     break
             
-            #if idDoc == '352209':
-                #print(data)
+            # if idDoc == '187122':
+            #     print(data)
         
         lstNoValidos.append([idDoc, archValido])
         print(idDoc + " es " + str(archValido))
@@ -60,6 +68,7 @@ for file in os.scandir(path):
             anio = ''
             mes = ''
             nombre = ''
+            bandera = 0
 
             if idTipDoc == '4':
                 razonSocialProv = ''
@@ -92,7 +101,6 @@ for file in os.scandir(path):
             if idTipDoc == '82':
                 aPaterno = ''
                 aMaterno = ''
-                bandera = 0
 
                 rfc = re.findall('[A-ZÑ&]{3,4}[0-9]{6}[A-ZÑ&0-9]{3}', data)
                 rfcProv = rfc[0]
@@ -183,11 +191,59 @@ for file in os.scandir(path):
                         rango = slice(ini, fin)
                         nombre = line.replace('\n', ' ')[rango]
 
+                    elif 'Nombre:' in line:
+                        ini = line.index(":")
+                        ini += 1
+ 
+                        fin = line.index("</")
+ 
+                        rango = slice(ini, fin)
+                        nombre = line.replace('\n', ' ')[rango]
+
+                    elif  'Período de la declaración:' in line:
+                        fila = line.split()
+                        if 'Periodicidad:' in line:
+                            mes = fila[6]
+                        else:
+                            mes = fila[4]
+
+                    elif  'Tipo de declaraclón:' in line:
+                        fila = line.replace('\n', ' ').split()
+                        anio = fila[7]
+                        anio = anio.replace('ü', '0')
+
+                    elif  'Período de la declaracién:' in line:
+                        fila = line.replace('\n', ' ').split()
+                        mes = fila[4]
+
+                    elif 'Sello díoital' in data or bandera == 1:
+                        if rfcProv in line:
+                            bandera = 1
+                        elif bandera == 1:
+                            nombre = line.replace('\n', ' ').replace('</p>', '')
+                            bandera = 0
+
+                    if 'Ejercicio:' in line:
+                        ini = line.index("Ejercicio:")
+                        ini += 10
+
+                        if 'Fecha y hora de presentación:' in line:
+                            fin = line.index("Fecha y hora de presentación:")
+                        else:
+                            fin = line.index("</")
+                            
+                        rango = slice(ini, fin)
+                        anio = line.replace('\n', ' ')[rango]
+
+
+                lstRepse.append([idDoc, idCatOpe, idTipDoc, rfcProv + "|" + mes.upper().strip() + "|" + anio.strip() + "|" + nombre.upper().strip()])
+
+
                 #print(data)
-                print(rfcProv)
-                print(nombre.strip())
-                print(mes.strip())
-                print(anio.strip())
+                # print(rfcProv)
+                # print(nombre.strip())
+                # print(mes.strip())
+                # print(anio.strip())
                 
 
         elif archValido == 0:
@@ -196,7 +252,7 @@ for file in os.scandir(path):
                                 
             sht.copyfile(file.path, pathNoValidos + "//" + file.name)
 
-            if idTipDoc == '82' and formatoIncorrecto == 1:
+            if formatoIncorrecto == 1:
                 lstRepse.append([idDoc, idCatOpe, idTipDoc, "Archivo No Valido|"])
             else:
                 lstRepse.append([idDoc, idCatOpe, idTipDoc, "Revisar archivo a mano|"])
